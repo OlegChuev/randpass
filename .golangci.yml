@@ -1,0 +1,56 @@
+run:
+  timeout: 5m
+  go: '1.24'
+
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - typecheck
+    - unused
+    - bodyclose
+    - gocritic
+    - gofmt
+    - goimports
+    - gosec
+    - misspell
+    - unparam
+    - unconvert
+    - goconst
+    - gocyclo
+    - dupl
+    - goheader
+    - lll
+    - nakedret
+    - prealloc
+    - exportloopref
+
+linters-settings:
+  gocyclo:
+    min-complexity: 15
+  goconst:
+    min-len: 2
+    min-occurrences: 2
+  lll:
+    line-length: 120
+  nakedret:
+    max-func-lines: 30
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gosec
+        - goconst
+        - dupl
+    - path: cmd/
+      linters:
+        - goheader
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true

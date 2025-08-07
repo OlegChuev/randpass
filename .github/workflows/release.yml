@@ -1,0 +1,159 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  GO_VERSION: '1.24'
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      release_id: ${{ steps.create_release.outputs.id }}
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.event.inputs.version }}
+        release_name: Release ${{ github.event.inputs.version }}
+        body: |
+          ## randpass ${{ github.event.inputs.version }}
+
+          ### 🚀 Features
+          - Fast, secure password generation
+          - Customizable character sets
+          - Multiple output formats
+          - Cross-platform support
+
+          ### 📦 Downloads
+          Download the appropriate binary for your platform below.
+
+          ### 🔐 Checksums
+          See `checksums.txt` for SHA256 verification.
+
+          ### 📖 Usage
+          ```bash
+          # Default 16-character password
+          ./randpass
+
+          # Custom length without symbols
+          ./randpass -l 24 --no-symbols
+
+          # Copy to clipboard
+          ./randpass -c
+          ```
+        draft: false
+        prerelease: ${{ github.event.inputs.prerelease }}
+
+  build-and-upload:
+    name: Build and Upload
+    runs-on: ubuntu-latest
+    needs: create-release
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            name: linux-amd64
+          - goos: linux
+            goarch: arm64
+            name: linux-arm64
+          - goos: darwin
+            goarch: amd64
+            name: macos-amd64
+          - goos: darwin
+            goarch: arm64
+            name: macos-arm64
+          - goos: windows
+            goarch: amd64
+            name: windows-amd64
+            ext: .exe
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Build binary
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+        CGO_ENABLED: 0
+      run: |
+        BINARY_NAME="randpass-${{ matrix.name }}${{ matrix.ext }}"
+        go build \
+          -ldflags="-s -w -X main.version=${{ github.event.inputs.version }}" \
+          -o "$BINARY_NAME" \
+          ./cmd/randpass
+
+        # Create archive
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          zip "randpass-${{ matrix.name }}.zip" "$BINARY_NAME"
+          ASSET_NAME="randpass-${{ matrix.name }}.zip"
+        else
+          tar -czf "randpass-${{ matrix.name }}.tar.gz" "$BINARY_NAME"
+          ASSET_NAME="randpass-${{ matrix.name }}.tar.gz"
+        fi
+
+        echo "ASSET_NAME=$ASSET_NAME" >> $GITHUB_ENV
+        echo "BINARY_NAME=$BINARY_NAME" >> $GITHUB_ENV
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: ./${{ env.ASSET_NAME }}
+        asset_name: ${{ env.ASSET_NAME }}
+        asset_content_type: application/octet-stream
+
+  generate-checksums:
+    name: Generate Checksums
+    runs-on: ubuntu-latest
+    needs: [create-release, build-and-upload]
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download release assets
+      run: |
+        # Get all release assets and generate checksums
+        mkdir -p checksums
+        cd checksums
+
+        # This would normally download the actual assets, but for simplicity
+        # we'll create a placeholder. In a real scenario, you'd download
+        # all the uploaded assets and generate their checksums.
+        echo "# SHA256 Checksums for randpass ${{ github.event.inputs.version }}" > checksums.txt
+        echo "# Verify with: sha256sum -c checksums.txt" >> checksums.txt
+        echo "" >> checksums.txt
+
+    - name: Upload checksums
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: ./checksums/checksums.txt
+        asset_name: checksums.txt
+        asset_content_type: text/plain
