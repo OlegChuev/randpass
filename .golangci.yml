@@ -26,7 +26,7 @@ linters:
     - lll
     - nakedret
     - prealloc
-    - exportloopref
+    - copyloopvar
 
 linters-settings:
   gocyclo:
@@ -49,8 +49,3 @@ issues:
     - path: cmd/
       linters:
         - goheader
-
-output:
-  format: colored-line-number
-  print-issued-lines: true
-  print-linter-name: true
